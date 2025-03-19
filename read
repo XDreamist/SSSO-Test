@@ -1,0 +1,34 @@
+JAAS Configuration File (krb5.conf or System Properties)
+You’ll need to configure Kerberos. Create a file named jaas.conf (or pass these as system properties):
+
+Steps to Run
+Set Up Environment:
+Place jaas.conf in a known location (e.g., C:\jaas.conf).
+Set the system property: -Djava.security.auth.login.config=C:\jaas.conf.
+Run the Code:
+Compile and run on a Windows machine logged into the AD domain.
+Ensure the Java runtime has access to the Kerberos ticket cache (Windows manages this automatically).
+Output:
+If successful, it retrieves the logged-in user’s sAMAccountName.
+If it fails, it indicates an authentication or LDAP error.
+Explanation of the Code
+JAAS Login:
+LoginContext uses the Krb5LoginModule to authenticate using the system’s Kerberos ticket cache (useTicketCache=true).
+doNotPrompt=true ensures no username/password prompt appears.
+LDAP Connection:
+The GSSAPI mechanism (Kerberos) is used instead of "simple" authentication.
+The Subject.doAs block executes the LDAP query with the authenticated credentials.
+User Retrieval:
+A generic search for (objectClass=user) is used, but you could refine it to filter by the authenticated principal if needed.
+Advantages
+No Credentials Required: Uses the current Windows session’s Kerberos ticket.
+Client-Side: Runs entirely on the client machine.
+Secure: Leverages Kerberos instead of sending plaintext credentials.
+Limitations
+Windows Only: Relies on Windows’ Kerberos ticket cache.
+Domain-Joined: The client machine must be part of the AD domain.
+Kerberos Setup: Requires JAAS and Kerberos configuration.
+Alternative: Browser-Based SSO (e.g., SPNEGO)
+If this is for a web application, you could use SPNEGO (a Kerberos-based protocol) in a browser. The client browser negotiates authentication with the server, which then validates the ticket against AD. This requires server-side configuration (e.g., in a servlet container like Tomcat) but works client-side in the browser without code.
+
+Would you like me to elaborate on SPNEGO or refine this code further?
