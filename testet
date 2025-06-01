@@ -1,0 +1,71 @@
+#!/bin/bash
+
+WHITELIST="/var/whitelist.txt"
+USB_LOG="/var/log/usb-log.json"
+
+HOSTNAME=$(hostname)
+DATE=$(date)
+
+# Fallback values if environment variables aren't set
+USB_SERIAL="${ID_SERIAL_SHORT:-unknown}"
+USB_VENDOR="${ID_VENDOR:-unknown}"
+USB_MODEL="${ID_MODEL:-unknown}"
+
+DEV_NAME="${DEVNAME:-unknown}"
+DEV_TYPE="${DEVTYPE:-unknown}"
+DEV_PATH="${DEVPATH:-unknown}"
+DEV_STATUS="$1"
+
+# Only handle certain device types
+case "$DEV_TYPE" in
+    usb_device|partition|disk)
+        ;;
+    *)
+        exit 0
+        ;;
+esac
+
+# Log JSON
+JSON="{\"date\":\"$DATE\",\"hostname\":\"$HOSTNAME\",\"serial\":\"$USB_SERIAL\",\"vendor\":\"$USB_VENDOR\",\"model\":\"$USB_MODEL\",\"device_name\":\"$DEV_NAME\",\"device_type\":\"$DEV_TYPE\",\"device_path\":\"$DEV_PATH\",\"status\":\"$DEV_STATUS\"}"
+echo "$JSON" >> "$USB_LOG"
+
+send_notify() {
+    USER=$(who | grep "(:0)" | awk '{print $1}' | head -n1)
+    if [ -n "$USER" ]; then
+        export DISPLAY=:0
+        export XAUTHORITY="/home/$USER/.Xauthority"
+        sudo -u "$USER" notify-send -i "$1" "$2" "$3"
+    fi
+}
+
+block_device() {
+    DEV_BUS_ID=$(echo "$DEV_PATH" | awk -F'/' '{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+-[0-9]+$/) print $i}' | head -n1)
+    echo -n "$DEV_BUS_ID" > /sys/bus/usb/drivers/usb/unbind
+    send_notify "drive-harddisk-usb" "USB Device Blocked" "Unauthorized USB was blocked"
+    exit 0
+}
+
+# Allow if whitelisted
+if grep -q "$USB_SERIAL" "$WHITELIST"; then
+    send_notify "drive-harddisk-usb" "Authorized USB Connected" "Whitelisted USB device connected"
+    exit 0
+fi
+
+if [ "$DEV_TYPE" == "usb_device" ]; then
+    if [ "$DEV_STATUS" == "add" ]; then
+        send_notify "drive-harddisk-usb" "USB Device Inserted" "Unauthorized USB was inserted"
+    elif [ "$DEV_STATUS" == "remove" ]; then
+        send_notify "drive-harddisk-usb" "USB Device Removed" "USB device was removed"
+    fi
+    exit 1
+fi
+
+# Allow if it's a CD/DVD writer
+if [[ "${DEV_NAME:0:2}" == "sr" ]]; then
+    send_notify "drive-optical" "CD/DVD Writer Allowed" "DVD Writer device allowed by default"
+    exit 0
+fi
+
+# Block everything else
+block_device "$DEV_PATH"
+
